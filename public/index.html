@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+	    <meta charset="UTF-8" />
+	    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	    <meta http-equiv="Cache-Control" content="no-store" />
+	    <title>柏データダウンローダー</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b1220;
+        --card: rgba(255, 255, 255, 0.06);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.65);
+        --border: rgba(255, 255, 255, 0.15);
+        --accent: #6ea8fe;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        background: radial-gradient(1200px 600px at 15% 10%, rgba(110, 168, 254, 0.35), transparent 55%),
+          radial-gradient(900px 520px at 85% 80%, rgba(167, 139, 250, 0.25), transparent 55%),
+          var(--bg);
+        color: var(--text);
+      }
+      .card {
+        width: min(720px, calc(100% - 48px));
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 22px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(10px);
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 12px;
+        letter-spacing: 0.2px;
+      }
+      p {
+        margin: 0 0 18px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      input {
+        flex: 1 1 280px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(0, 0, 0, 0.18);
+        color: var(--text);
+        outline: none;
+      }
+      input::placeholder {
+        color: rgba(255, 255, 255, 0.45);
+      }
+      button,
+      a.button {
+        flex: 0 0 auto;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(110, 168, 254, 0.22);
+        color: var(--text);
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      button:hover,
+      a.button:hover {
+        border-color: rgba(110, 168, 254, 0.5);
+      }
+      .status {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      code {
+        font-family:
+          ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          Monaco,
+          Consolas,
+          "Liberation Mono",
+          "Courier New",
+          monospace;
+        color: rgba(255, 255, 255, 0.8);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>柏データダウンローダー</h1>
+      <h4>すべてのBlobをZIPでダウンロード</h4>
+      <p>
+        ボタンをクリックすると、設定されたAzure Blobコンテナー内のすべてのデータをダウンロードできます。 
+      </p>
+      <!-- <p>Optional:
+        download only blobs that start with a prefix (folder path).</p> -->
+
+      <div class="row">
+        <!-- <input id="prefix" placeholder="Prefix (optional), e.g. reports/2025/" />
+        <input id="token" placeholder="Access token (optional)" /> -->
+        <button id="download">ZIPをダウンロード</button>
+        <!-- <a class="button" id="health" href="/api/health" target="_blank" rel="noreferrer">Health</a> -->
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+
+    <script>
+	      window.addEventListener("DOMContentLoaded", () => {
+	        const prefixEl = document.getElementById("prefix");
+	        const tokenEl = document.getElementById("token");
+	        const statusEl = document.getElementById("status");
+	        const downloadBtn = document.getElementById("download");
+	        const healthLink = document.getElementById("health");
+
+	        if (!statusEl || !downloadBtn) return;
+	        statusEl.textContent = "Ready.";
+
+        const savedToken = window.localStorage.getItem("downloadAllToken");
+        if (savedToken && tokenEl) tokenEl.value = savedToken;
+
+        function getToken() {
+          if (tokenEl) return tokenEl.value.trim();
+          return (window.localStorage.getItem("downloadAllToken") || "").trim();
+        }
+
+	        function buildUrl(baseUrl) {
+	          const prefix = prefixEl ? prefixEl.value.trim() : "";
+	          const token = getToken();
+
+          const params = new URLSearchParams();
+          if (prefix) params.set("prefix", prefix);
+          if (token) params.set("token", token);
+
+          const query = params.toString();
+          return query ? `${baseUrl}?${query}` : baseUrl;
+        }
+
+        function persistToken() {
+          if (!tokenEl) return;
+          const token = tokenEl.value.trim();
+          if (token) window.localStorage.setItem("downloadAllToken", token);
+          else window.localStorage.removeItem("downloadAllToken");
+        }
+
+        function refreshLinks() {
+          if (healthLink) healthLink.href = buildUrl("/api/health");
+        }
+
+	        if (tokenEl) {
+	          tokenEl.addEventListener("input", () => {
+	            persistToken();
+	            refreshLinks();
+	          });
+	        }
+	        if (prefixEl) prefixEl.addEventListener("input", refreshLinks);
+	        refreshLinks();
+
+        downloadBtn.addEventListener("click", () => {
+          persistToken();
+          const url = buildUrl("/api/download-all");
+          const healthUrl = buildUrl("/api/health");
+          const listUrl = buildUrl("/api/list?limit=1");
+
+          statusEl.textContent = "Checking access…";
+
+          fetch(healthUrl, { cache: "no-store" })
+            .then(async (r) => {
+              if (r.ok) return;
+              const body = await r.text().catch(() => "");
+              throw new Error(`${r.status} ${r.statusText}${body ? ` - ${body}` : ""}`);
+            })
+            .then(() =>
+              fetch(listUrl, { cache: "no-store" }).then(async (r) => {
+                if (r.ok) return;
+                const body = await r.text().catch(() => "");
+                throw new Error(`${r.status} ${r.statusText}${body ? ` - ${body}` : ""}`);
+              })
+            )
+            .then(() => {
+              statusEl.textContent =
+                "Preparing ZIP… download will start soon. Keep this tab open until the download begins.";
+              window.location.href = url;
+            })
+            .catch((err) => {
+              statusEl.textContent = `Download blocked: ${String(err?.message || err)}`;
+            });
+        });
+      });
+    </script>
+  </body>
+</html>
